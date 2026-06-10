@@ -71,8 +71,15 @@ pub fn continuation_input(previous: &StoredResponse, input: Option<&Value>) -> V
     messages
 }
 
+fn ensure_extra_object(extra: &mut Value) -> &mut serde_json::Map<String, Value> {
+    if !extra.is_object() {
+        *extra = Value::Object(serde_json::Map::new());
+    }
+    extra.as_object_mut().expect("extra is always an object")
+}
+
 pub fn set_request_input(request: &mut ResponsesRequest, input: Vec<Value>) {
-    request.extra["input"] = Value::Array(input);
+    ensure_extra_object(&mut request.extra).insert("input".to_string(), Value::Array(input));
 }
 
 pub fn should_store_response(request: &ResponsesRequest) -> bool {
@@ -80,7 +87,7 @@ pub fn should_store_response(request: &ResponsesRequest) -> bool {
 }
 
 pub fn disable_upstream_response_store(request: &mut ResponsesRequest) {
-    request.extra["store"] = Value::Bool(false);
+    ensure_extra_object(&mut request.extra).insert("store".to_string(), Value::Bool(false));
 }
 
 pub fn should_persist_gateway_response(store_enabled: bool, request: &ResponsesRequest) -> bool {

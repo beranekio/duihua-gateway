@@ -77,7 +77,8 @@ pub async fn responses(
             return previous_response_not_ready();
         }
         if payload.model.is_none() {
-            payload.model = response_model(&previous.response);
+            payload.model =
+                response_model(&previous.response).or_else(|| Some(state.default_model.clone()));
         }
         let input = continuation_input(&previous, request_input(&payload));
         set_request_input(&mut payload, input.clone());
@@ -161,7 +162,8 @@ pub async fn response_input_tokens(
             return previous_response_not_ready();
         }
         if payload.model.is_none() {
-            payload.model = response_model(&previous.response);
+            payload.model =
+                response_model(&previous.response).or_else(|| Some(state.default_model.clone()));
         }
         let input = continuation_input(&previous, request_input(&payload));
         set_request_input(&mut payload, input);
