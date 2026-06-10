@@ -1,0 +1,77 @@
+{{- $_ := include "duihua-gateway.validate.config" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "duihua-gateway.fullname" . }}
+  labels:
+    {{- include "duihua-gateway.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "duihua-gateway.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "duihua-gateway.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "duihua-gateway.serviceAccountName" . }}
+      containers:
+        - name: gateway
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ include "duihua-gateway.httpPort" . }}
+          env:
+            - name: BIND_ADDR
+              value: {{ include "duihua-gateway.bindAddr" . | quote }}
+            - name: DEFAULT_MODEL
+              value: {{ .Values.env.defaultModel | quote }}
+            - name: UPSTREAM_BASE_URL
+              value: {{ .Values.env.upstreamBaseUrl | quote }}
+            {{- if .Values.env.upstreamApiKey }}
+            - name: UPSTREAM_API_KEY
+              value: {{ .Values.env.upstreamApiKey | quote }}
+            {{- end }}
+            - name: MODEL_UPSTREAMS
+              value: {{ .Values.env.modelUpstreams | quote }}
+            - name: RESPONSES_API_STORE_ENABLED
+              value: {{ .Values.responsesApiStore.enabled | quote }}
+            {{- if .Values.responsesApiStore.enabled }}
+            - name: RESPONSES_API_STORE_ENDPOINT
+              value: {{ .Values.responsesApiStore.endpoint | quote }}
+            - name: RESPONSE_ID_STORE_TTL_SECONDS
+              value: {{ .Values.env.responseIdStoreTtlSeconds | quote }}
+            {{- if .Values.responsesApiStore.backgroundJobs.enabled }}
+            - name: RESPONSES_BACKGROUND_ENABLED
+              value: "true"
+            - name: BACKGROUND_QUEUE_CONSUMER_GROUP
+              value: {{ .Values.responsesApiStore.backgroundJobs.consumerGroup | quote }}
+            {{- end }}
+            {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
