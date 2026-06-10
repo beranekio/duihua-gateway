@@ -57,6 +57,13 @@ docker build -t duihua-gateway:local .
 
 The builder stage requires `protobuf-compiler` (for the `responses-api-store-client` git dependency). The runtime image is distroless; do not add a shell or package manager to the runtime stage.
 
+### Docker Compose
+
+```bash
+docker compose up --build
+# Full stack: docker compose --profile inference --profile store up --build
+```
+
 ### Integration smoke test
 
 ```bash
@@ -84,6 +91,7 @@ Requires `kind`, `kubectl`, `helm`, `docker`, and `curl`. CI runs this in the `h
 When wiring this service back into `duihua-ai-services`:
 
 - Replace inline `gateway-deployment.yaml` / `gateway-service.yaml` templates with an OCI subchart dependency on `duihua-gateway`.
+- Parent chart values should use the `duihua-gateway:` key (not `gateway:`).
 - Parent chart should set `env.modelUpstreams` from inference proxy Services.
 - Wire `responsesApiStore.endpoint` to the `responses-api-store` subchart Service when both are enabled.
 - Ingress and background-worker remain in the parent chart.

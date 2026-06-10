@@ -47,12 +47,28 @@ This repository was extracted from [beranekio/duihua-ai-services](https://github
 
 ## Local development
 
+### Rust (native)
+
 ```bash
 cargo build
 BIND_ADDR=127.0.0.1:8080 \
 UPSTREAM_BASE_URL=http://127.0.0.1:8000/v1 \
 RESPONSES_API_STORE_ENABLED=false \
 cargo run
+```
+
+### Docker Compose
+
+Gateway only (point `UPSTREAM_BASE_URL` at a host-local inference server):
+
+```bash
+UPSTREAM_BASE_URL=http://host.docker.internal:8000/v1 docker compose up --build
+```
+
+Full local stack with bundled inference and Responses API store:
+
+```bash
+RESPONSES_API_STORE_ENABLED=true docker compose --profile inference --profile store up --build
 ```
 
 Run the full local validation suite:
@@ -96,6 +112,8 @@ dependencies:
     version: 0.0.0-<git-sha>
     repository: oci://ghcr.io/beranekio/charts
 ```
+
+Parent chart values use the `duihua-gateway:` key (replacing the former inline `gateway:` templates).
 
 ## CI and releases
 
