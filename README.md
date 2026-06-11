@@ -45,6 +45,18 @@ This repository was extracted from [beranekio/duihua-ai-services](https://github
 | `BACKGROUND_QUEUE_CONSUMER_GROUP` | `duihua-background` | Consumer group for background queue |
 | `RUST_LOG` | `info` | Tracing filter |
 
+## Responses API store
+
+Response persistence is optional and disabled by default (`RESPONSES_API_STORE_ENABLED=false`).
+
+When enabled, the gateway persists completed Responses API objects and materialized conversation input via `responses-api-store`. Follow-up creation requests with `previous_response_id` are expanded into stateless upstream requests (prior input/output plus new input, with `previous_response_id` removed). Retrieval, deletion, cancel, and input-item requests are served from the store.
+
+When the gateway store is **disabled**, requests that reference a prior response ID (`previous_response_id`, `GET/DELETE /v1/responses/{id}`, etc.) return a not-found error shaped like vLLM — they are **not** forwarded to the upstream's in-memory store. This is intentional: the gateway does not rely on upstream persistence, which allows inference deployments to scale to zero and use multiple replicas without shared in-memory state.
+
+When the gateway store is **enabled**, upstream in-process response storage is also disabled (`store: false` on proxied requests) so inference does not need to retain Responses API state between calls.
+
+Creation requests that explicitly set `store: false` are never persisted by the gateway.
+
 ## Local development
 
 ### Rust (native)
