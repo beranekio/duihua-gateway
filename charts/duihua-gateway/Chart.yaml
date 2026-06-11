@@ -1,0 +1,12 @@
+apiVersion: v2
+name: duihua-gateway
+description: OpenAI-compatible HTTP gateway for self-hosted inference
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - openai
+  - gateway
+  - inference
+maintainers:
+  - name: beranekio

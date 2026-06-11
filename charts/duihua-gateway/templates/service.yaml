@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "duihua-gateway.fullname" . }}
+  labels:
+    {{- include "duihua-gateway.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "duihua-gateway.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ include "duihua-gateway.servicePort" . }}
+      targetPort: http
+      protocol: TCP
+      {{- if and (or (eq .Values.service.type "NodePort") (eq .Values.service.type "LoadBalancer")) .Values.service.nodePort }}
+      nodePort: {{ .Values.service.nodePort }}
+      {{- end }}

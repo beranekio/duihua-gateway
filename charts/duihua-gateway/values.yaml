@@ -1,0 +1,74 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/beranekio/duihua-gateway
+  tag: "latest"
+  pullPolicy: Always
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+service:
+  type: ClusterIP
+  # Inherits http.port when null. Set explicitly to override Service port only.
+  port: null
+  nodePort: null
+
+http:
+  # Canonical HTTP port; containerPort and BIND_ADDR derive from this unless overridden.
+  port: 8080
+  # Optional full bind address (must be pod-reachable, e.g. 0.0.0.0:8080). When empty, uses 0.0.0.0:http.port.
+  listenAddr: ""
+
+env:
+  defaultModel: google/gemma-4-31B-it
+  upstreamBaseUrl: http://vllm:8000/v1
+  # Optional bearer token forwarded to upstream inference.
+  upstreamApiKey: ""
+  # Comma-separated model=url entries, e.g. "model-a=http://proxy-a:8080/v1,model-b=http://proxy-b:8080/v1"
+  modelUpstreams: ""
+  responseIdStoreTtlSeconds: "86400"
+
+responsesApiStore:
+  # Persist completed Responses API objects via the responses-api-store gRPC service.
+  enabled: false
+  # gRPC endpoint (http://host:port). Required when enabled.
+  endpoint: ""
+  backgroundJobs:
+    enabled: true
+    consumerGroup: duihua-background
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 20
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 3
+  periodSeconds: 10
+  failureThreshold: 3
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
