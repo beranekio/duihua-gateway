@@ -51,18 +51,18 @@ pub async fn store_response(
     upstream: String,
     response: Value,
     input: Vec<Value>,
-) {
+) -> Result<(), Response> {
     if !state.responses_api_store_enabled {
-        return;
+        return Ok(());
     }
 
     let Some(response_store) = &state.response_store else {
         error!("responses API store is enabled but no response store is configured");
-        return;
+        return Err((StatusCode::BAD_GATEWAY, "response id store unavailable").into_response());
     };
 
     let Some(response_id) = response_id_from_value(&response) else {
-        return;
+        return Ok(());
     };
     let stored = StoredResponse {
         upstream,
@@ -74,5 +74,8 @@ pub async fn store_response(
     };
     if let Err(e) = response_store.store(&response_id, &stored).await {
         error!("failed to store response {response_id}: {e}");
+        return Err((StatusCode::BAD_GATEWAY, "response id store write failed").into_response());
     }
+
+    Ok(())
 }

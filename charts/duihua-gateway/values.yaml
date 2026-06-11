@@ -25,7 +25,7 @@ service:
 http:
   # Canonical HTTP port; containerPort and BIND_ADDR derive from this unless overridden.
   port: 8080
-  # Optional full bind address (e.g. 127.0.0.1:8080). When empty, uses 0.0.0.0:http.port.
+  # Optional full bind address (must be pod-reachable, e.g. 0.0.0.0:8080). When empty, uses 0.0.0.0:http.port.
   listenAddr: ""
 
 env:

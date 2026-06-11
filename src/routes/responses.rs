@@ -19,7 +19,7 @@ use crate::{
     },
     state::{upstream_for_model, AppState},
     store::load_response,
-    upstream::{proxy_request, proxy_response_request},
+    upstream::{proxy_request, proxy_response_request, resolve_upstream_authorization},
 };
 
 pub async fn responses(
@@ -119,10 +119,7 @@ async fn create_background_response(
     upstream: String,
     input: Vec<Value>,
 ) -> Response {
-    let upstream_authorization = headers
-        .get("authorization")
-        .and_then(|value| value.to_str().ok())
-        .map(str::to_string);
+    let upstream_authorization = resolve_upstream_authorization(&headers, state.as_ref());
     let model = payload
         .model
         .clone()
@@ -231,21 +228,22 @@ pub async fn cancel_response(
         Ok(stored) => stored,
         Err(response) => return response,
     };
-    let status = background::stored_response_status(&stored);
-    if matches!(status, Some("completed" | "failed" | "cancelled")) {
-        let message = if status == Some("completed")
-            && stored.response.get("background").and_then(Value::as_bool) != Some(true)
-        {
-            "Cannot cancel a synchronous response.".to_string()
-        } else {
-            format!(
-                "Cannot cancel a response that is already {}.",
-                status.unwrap_or("unknown")
-            )
-        };
+    if stored.response.get("background").and_then(Value::as_bool) != Some(true) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({"error": {"message": message, "type": "invalid_request_error", "param": "response_id", "code": 400}})),
+            Json(json!({"error": {"message": "Cannot cancel a synchronous response.", "type": "invalid_request_error", "param": "response_id", "code": 400}})),
+        )
+            .into_response();
+    }
+
+    let status = background::stored_response_status(&stored);
+    if matches!(
+        status,
+        Some("completed" | "failed" | "cancelled" | "incomplete")
+    ) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": {"message": format!("Cannot cancel a response that is already {}.", status.unwrap_or("unknown")), "type": "invalid_request_error", "param": "response_id", "code": 400}})),
         )
             .into_response();
     }

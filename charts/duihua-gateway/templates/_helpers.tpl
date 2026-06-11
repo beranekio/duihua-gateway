@@ -72,4 +72,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- fail "responsesApiStore.enabled=true requires responsesApiStore.endpoint" -}}
 {{- end -}}
 {{- end -}}
+{{- if .Values.http.listenAddr -}}
+{{- $addr := .Values.http.listenAddr -}}
+{{- if or (hasPrefix "127.0.0.1:" $addr) (hasPrefix "localhost:" $addr) (eq $addr "127.0.0.1") (eq $addr "localhost") -}}
+{{- fail "http.listenAddr must bind to a pod-reachable address (use 0.0.0.0:port, not loopback)" -}}
+{{- end -}}
+{{- end -}}
 {{- end -}}

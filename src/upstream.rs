@@ -15,15 +15,26 @@ use tracing::error;
 
 use crate::{state::AppState, store::store_response};
 
+pub fn resolve_upstream_authorization(headers: &HeaderMap, state: &AppState) -> Option<String> {
+    if let Some(api_key) = &state.upstream_api_key {
+        return Some(format!("Bearer {api_key}"));
+    }
+
+    headers
+        .get("authorization")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string)
+}
+
 pub fn apply_openai_upstream_headers(
     mut req: reqwest::RequestBuilder,
     headers: &HeaderMap,
     state: &AppState,
 ) -> reqwest::RequestBuilder {
-    if let Some(auth_header) = headers.get("authorization") {
-        req = req.header("authorization", auth_header);
-    } else if let Some(api_key) = &state.upstream_api_key {
+    if let Some(api_key) = &state.upstream_api_key {
         req = req.bearer_auth(api_key);
+    } else if let Some(auth_header) = headers.get("authorization") {
+        req = req.header("authorization", auth_header);
     }
     req
 }
@@ -136,7 +147,11 @@ pub async fn proxy_upstream_tracking_response(
                 match resp.bytes().await {
                     Ok(body) => {
                         if persist_response {
-                            track_response_from_json(&state, &upstream, &input, &body).await;
+                            if let Err(response) =
+                                track_response_from_json(&state, &upstream, &input, &body).await
+                            {
+                                return response;
+                            }
                         }
                         let mut downstream = Response::new(Body::from(body));
                         *downstream.status_mut() = status;
@@ -168,11 +183,16 @@ pub fn is_event_stream(headers: &HeaderMap) -> bool {
         .is_some_and(|value| value.starts_with("text/event-stream"))
 }
 
-async fn track_response_from_json(state: &AppState, upstream: &str, input: &[Value], body: &[u8]) {
+async fn track_response_from_json(
+    state: &AppState,
+    upstream: &str,
+    input: &[Value],
+    body: &[u8],
+) -> Result<(), Response> {
     let Ok(response) = serde_json::from_slice::<Value>(body) else {
-        return;
+        return Ok(());
     };
-    store_response(state, upstream.to_string(), response, input.to_vec()).await;
+    store_response(state, upstream.to_string(), response, input.to_vec()).await
 }
 
 struct ResponseTracker {
@@ -212,7 +232,7 @@ impl ResponseTracker {
             let upstream = self.upstream.clone();
             let input = self.input.clone();
             tokio::spawn(async move {
-                store_response(state.as_ref(), upstream, response, input).await;
+                let _ = store_response(state.as_ref(), upstream, response, input).await;
             });
         }
     }
@@ -233,9 +253,10 @@ impl ResponseTracker {
                     let data = data.trim();
                     if data != "[DONE]" {
                         if let Ok(value) = serde_json::from_str::<Value>(data) {
-                            if value.get("type").and_then(Value::as_str)
-                                == Some("response.completed")
-                            {
+                            if matches!(
+                                value.get("type").and_then(Value::as_str),
+                                Some("response.completed" | "response.failed")
+                            ) {
                                 found_response = value.get("response").cloned();
                                 consumed = absolute_newline_idx + 1;
                                 break;
@@ -517,6 +538,76 @@ mod tests {
                 .get("anthropic-beta")
                 .and_then(|v| v.to_str().ok()),
             Some("messages-2024-10-22")
+        );
+    }
+
+    #[test]
+    fn openai_uses_upstream_bearer_instead_of_client_authorization() {
+        let state = AppState {
+            upstream_base: "http://default:8000/v1".to_string(),
+            model_upstreams: HashMap::new(),
+            default_model: "model-default".to_string(),
+            upstream_api_key: Some("upstream-secret".to_string()),
+            client: Client::new(),
+            responses_api_store_enabled: false,
+            response_store: None,
+            background_jobs_enabled: false,
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert("authorization", "Bearer client-bearer".parse().unwrap());
+
+        let req =
+            apply_openai_upstream_headers(Client::new().post("http://test"), &headers, &state);
+        let built = req.build().expect("request should build");
+        assert_eq!(
+            built
+                .headers()
+                .get("authorization")
+                .and_then(|v| v.to_str().ok()),
+            Some("Bearer upstream-secret")
+        );
+    }
+
+    #[test]
+    fn resolve_upstream_authorization_prefers_configured_key() {
+        let state = AppState {
+            upstream_base: "http://default:8000/v1".to_string(),
+            model_upstreams: HashMap::new(),
+            default_model: "model-default".to_string(),
+            upstream_api_key: Some("upstream-secret".to_string()),
+            client: Client::new(),
+            responses_api_store_enabled: false,
+            response_store: None,
+            background_jobs_enabled: false,
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert("authorization", "Bearer client-bearer".parse().unwrap());
+
+        assert_eq!(
+            resolve_upstream_authorization(&headers, &state).as_deref(),
+            Some("Bearer upstream-secret")
+        );
+    }
+
+    #[test]
+    fn extracts_failed_streamed_response() {
+        let state = Arc::new(AppState {
+            upstream_base: "http://default:8000/v1".to_string(),
+            model_upstreams: HashMap::new(),
+            default_model: "model-default".to_string(),
+            upstream_api_key: None,
+            client: Client::new(),
+            responses_api_store_enabled: false,
+            response_store: None,
+            background_jobs_enabled: false,
+        });
+        let tracker = ResponseTracker::new(state, "http://default:8000/v1".to_string(), Vec::new());
+
+        assert_eq!(
+            tracker.find_response(
+                b"data: {\"type\":\"response.failed\",\"response\":{\"id\":\"resp_failed\",\"status\":\"failed\"}}\n"
+            ),
+            Some(json!({"id": "resp_failed", "status": "failed"}))
         );
     }
 
