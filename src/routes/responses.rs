@@ -22,6 +22,19 @@ use crate::{
     upstream::{proxy_request, proxy_response_request, resolve_upstream_authorization},
 };
 
+fn continuation_upstream(
+    state: &AppState,
+    previous_upstream: &str,
+    explicit_model: Option<&str>,
+    resolved_model: &str,
+) -> String {
+    if explicit_model.is_some() {
+        upstream_for_model(state, resolved_model).to_string()
+    } else {
+        previous_upstream.to_string()
+    }
+}
+
 pub async fn responses(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -76,13 +89,24 @@ pub async fn responses(
         if background::is_in_flight_background(&previous) {
             return previous_response_not_ready();
         }
+        let explicit_model = payload.model.clone();
         if payload.model.is_none() {
             payload.model =
                 response_model(&previous.response).or_else(|| Some(state.default_model.clone()));
         }
+        let resolved_model = payload
+            .model
+            .as_deref()
+            .unwrap_or(state.default_model.as_str());
+        let upstream = continuation_upstream(
+            state.as_ref(),
+            &previous.upstream,
+            explicit_model.as_deref(),
+            resolved_model,
+        );
         let input = continuation_input(&previous, request_input(&payload));
         set_request_input(&mut payload, input.clone());
-        (previous.upstream, input)
+        (upstream, input)
     } else {
         if payload.model.is_none() {
             payload.model = Some(state.default_model.clone());
@@ -158,13 +182,24 @@ pub async fn response_input_tokens(
         if background::is_in_flight_background(&previous) {
             return previous_response_not_ready();
         }
+        let explicit_model = payload.model.clone();
         if payload.model.is_none() {
             payload.model =
                 response_model(&previous.response).or_else(|| Some(state.default_model.clone()));
         }
+        let resolved_model = payload
+            .model
+            .as_deref()
+            .unwrap_or(state.default_model.as_str());
+        let upstream = continuation_upstream(
+            state.as_ref(),
+            &previous.upstream,
+            explicit_model.as_deref(),
+            resolved_model,
+        );
         let input = continuation_input(&previous, request_input(&payload));
         set_request_input(&mut payload, input);
-        previous.upstream
+        upstream
     } else {
         if payload.model.is_none() {
             payload.model = Some(state.default_model.clone());
@@ -274,5 +309,47 @@ pub async fn list_response_input_items(
             Json(json!({"object": "list", "data": stored.input, "has_more": false})).into_response()
         }
         Err(response) => response,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    use reqwest::Client;
+
+    fn test_state() -> AppState {
+        AppState {
+            upstream_base: "http://default:8000/v1".to_string(),
+            model_upstreams: HashMap::from([(
+                "model-b".to_string(),
+                "http://model-b:8000/v1".to_string(),
+            )]),
+            default_model: "model-default".to_string(),
+            upstream_api_key: None,
+            client: Client::new(),
+            responses_api_store_enabled: false,
+            background_jobs_enabled: false,
+            response_store: None,
+        }
+    }
+
+    #[test]
+    fn continuation_upstream_uses_previous_upstream_without_explicit_model() {
+        let state = test_state();
+        assert_eq!(
+            continuation_upstream(&state, "http://model-a:8000/v1", None, "model-b"),
+            "http://model-a:8000/v1"
+        );
+    }
+
+    #[test]
+    fn continuation_upstream_routes_explicit_model_override() {
+        let state = test_state();
+        assert_eq!(
+            continuation_upstream(&state, "http://model-a:8000/v1", Some("model-b"), "model-b"),
+            "http://model-b:8000/v1"
+        );
     }
 }

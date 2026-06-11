@@ -255,7 +255,11 @@ impl ResponseTracker {
                         if let Ok(value) = serde_json::from_str::<Value>(data) {
                             if matches!(
                                 value.get("type").and_then(Value::as_str),
-                                Some("response.completed" | "response.failed")
+                                Some(
+                                    "response.completed"
+                                        | "response.failed"
+                                        | "response.incomplete"
+                                )
                             ) {
                                 found_response = value.get("response").cloned();
                                 consumed = absolute_newline_idx + 1;
@@ -586,6 +590,28 @@ mod tests {
         assert_eq!(
             resolve_upstream_authorization(&headers, &state).as_deref(),
             Some("Bearer upstream-secret")
+        );
+    }
+
+    #[test]
+    fn extracts_incomplete_streamed_response() {
+        let state = Arc::new(AppState {
+            upstream_base: "http://default:8000/v1".to_string(),
+            model_upstreams: HashMap::new(),
+            default_model: "model-default".to_string(),
+            upstream_api_key: None,
+            client: Client::new(),
+            responses_api_store_enabled: false,
+            response_store: None,
+            background_jobs_enabled: false,
+        });
+        let tracker = ResponseTracker::new(state, "http://default:8000/v1".to_string(), Vec::new());
+
+        assert_eq!(
+            tracker.find_response(
+                b"data: {\"type\":\"response.incomplete\",\"response\":{\"id\":\"resp_incomplete\",\"status\":\"incomplete\"}}\n"
+            ),
+            Some(json!({"id": "resp_incomplete", "status": "incomplete"}))
         );
     }
 
