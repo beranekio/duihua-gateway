@@ -45,6 +45,8 @@ This repository was extracted from [beranekio/duihua-ai-services](https://github
 | `BACKGROUND_QUEUE_CONSUMER_GROUP` | `duihua-background` | Consumer group for background queue |
 | `RUST_LOG` | `info` | Tracing filter |
 
+The HTTP router accepts request bodies up to 64 MiB (Axum's default 2 MiB limit is too small for multimodal payloads).
+
 ## Responses API store
 
 Response persistence is optional and disabled by default (`RESPONSES_API_STORE_ENABLED=false`).

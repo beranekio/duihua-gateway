@@ -8,12 +8,16 @@ mod responses;
 use std::sync::Arc;
 
 use axum::{
+    extract::DefaultBodyLimit,
     routing::{get, post},
     Router,
 };
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use crate::state::AppState;
+
+/// Axum's default JSON body limit is 2 MiB, which rejects common multimodal payloads.
+const MAX_REQUEST_BODY_BYTES: usize = 64 * 1024 * 1024;
 
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
@@ -43,6 +47,7 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/v1/responses/{response_id}/input_items",
             get(responses::list_response_input_items),
         )
+        .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY_BYTES))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
