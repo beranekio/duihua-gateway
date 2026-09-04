@@ -84,7 +84,7 @@ pub async fn responses(
     {
         let previous = match load_response(state.as_ref(), &previous_response_id).await {
             Ok(previous) => previous,
-            Err(response) => return response,
+            Err(response) => return *response,
         };
         if background::is_in_flight_background(&previous) {
             return previous_response_not_ready();
@@ -165,7 +165,7 @@ async fn create_background_response(
     .await
     {
         Ok(()) => (StatusCode::OK, Json(queued_response)).into_response(),
-        Err(response) => response,
+        Err(response) => *response,
     }
 }
 
@@ -177,7 +177,7 @@ pub async fn response_input_tokens(
     let upstream = if let Some(previous_response_id) = payload.previous_response_id.take() {
         let previous = match load_response(state.as_ref(), &previous_response_id).await {
             Ok(previous) => previous,
-            Err(response) => return response,
+            Err(response) => return *response,
         };
         if background::is_in_flight_background(&previous) {
             return previous_response_not_ready();
@@ -231,7 +231,7 @@ pub async fn get_response(
     let _ = (headers, uri);
     match load_response(state.as_ref(), &response_id).await {
         Ok(stored) => Json(stored.response).into_response(),
-        Err(response) => response,
+        Err(response) => *response,
     }
 }
 
@@ -243,12 +243,12 @@ pub async fn delete_response(
     let _ = headers;
     let stored = match crate::store::load_stored_response(state.as_ref(), &response_id).await {
         Ok(stored) => stored,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     if let Err(response) =
         background::finalize_background_deletion(state.as_ref(), &response_id, &stored).await
     {
-        return response;
+        return *response;
     }
     Json(json!({"id": response_id, "object": "response.deleted", "deleted": true})).into_response()
 }
@@ -261,7 +261,7 @@ pub async fn cancel_response(
     let _ = headers;
     let mut stored = match crate::store::load_stored_response(state.as_ref(), &response_id).await {
         Ok(stored) => stored,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     if stored.response.get("background").and_then(Value::as_bool) != Some(true) {
         return (
@@ -308,7 +308,7 @@ pub async fn list_response_input_items(
         Ok(stored) => {
             Json(json!({"object": "list", "data": stored.input, "has_more": false})).into_response()
         }
-        Err(response) => response,
+        Err(response) => *response,
     }
 }
 

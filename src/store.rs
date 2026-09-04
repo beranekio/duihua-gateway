@@ -11,14 +11,16 @@ use crate::{background, error::response_not_found, state::AppState};
 pub async fn load_stored_response(
     state: &AppState,
     response_id: &str,
-) -> std::result::Result<StoredResponse, Response> {
+) -> std::result::Result<StoredResponse, Box<Response>> {
     if !state.responses_api_store_enabled {
-        return Err(response_not_found(response_id));
+        return Err(Box::new(response_not_found(response_id)));
     }
 
     let Some(response_store) = &state.response_store else {
         error!("responses API store is enabled but no response store is configured");
-        return Err((StatusCode::BAD_GATEWAY, "response id store unavailable").into_response());
+        return Err(Box::new(
+            (StatusCode::BAD_GATEWAY, "response id store unavailable").into_response(),
+        ));
     };
 
     match response_store
@@ -27,14 +29,16 @@ pub async fn load_stored_response(
     {
         Ok(Some(response)) => {
             if background::stored_response_status(&response) == Some("deleted") {
-                return Err(response_not_found(response_id));
+                return Err(Box::new(response_not_found(response_id)));
             }
             Ok(response)
         }
-        Ok(None) => Err(response_not_found(response_id)),
+        Ok(None) => Err(Box::new(response_not_found(response_id))),
         Err(e) => {
             error!("failed to read response id store for {response_id}: {e}");
-            Err((StatusCode::BAD_GATEWAY, "response id store read failed").into_response())
+            Err(Box::new(
+                (StatusCode::BAD_GATEWAY, "response id store read failed").into_response(),
+            ))
         }
     }
 }
@@ -42,7 +46,7 @@ pub async fn load_stored_response(
 pub async fn load_response(
     state: &AppState,
     response_id: &str,
-) -> std::result::Result<StoredResponse, Response> {
+) -> std::result::Result<StoredResponse, Box<Response>> {
     load_stored_response(state, response_id).await
 }
 
@@ -51,14 +55,16 @@ pub async fn store_response(
     upstream: String,
     response: Value,
     input: Vec<Value>,
-) -> Result<(), Response> {
+) -> Result<(), Box<Response>> {
     if !state.responses_api_store_enabled {
         return Ok(());
     }
 
     let Some(response_store) = &state.response_store else {
         error!("responses API store is enabled but no response store is configured");
-        return Err((StatusCode::BAD_GATEWAY, "response id store unavailable").into_response());
+        return Err(Box::new(
+            (StatusCode::BAD_GATEWAY, "response id store unavailable").into_response(),
+        ));
     };
 
     let Some(response_id) = response_id_from_value(&response) else {
@@ -74,7 +80,9 @@ pub async fn store_response(
     };
     if let Err(e) = response_store.store(&response_id, &stored).await {
         error!("failed to store response {response_id}: {e}");
-        return Err((StatusCode::BAD_GATEWAY, "response id store write failed").into_response());
+        return Err(Box::new(
+            (StatusCode::BAD_GATEWAY, "response id store write failed").into_response(),
+        ));
     }
 
     Ok(())
