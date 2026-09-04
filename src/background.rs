@@ -13,23 +13,27 @@ pub async fn enqueue_background_response(
     upstream_request: Value,
     queued_response: Value,
     upstream_authorization: Option<String>,
-) -> Result<(), axum::response::Response> {
+) -> Result<(), Box<axum::response::Response>> {
     let Some(response_store) = &state.response_store else {
         error!("responses API store is enabled but no response store is configured");
-        return Err((
-            axum::http::StatusCode::BAD_GATEWAY,
-            "response id store unavailable",
-        )
-            .into_response());
+        return Err(Box::new(
+            (
+                axum::http::StatusCode::BAD_GATEWAY,
+                "response id store unavailable",
+            )
+                .into_response(),
+        ));
     };
 
     if !state.background_jobs_enabled {
         error!("background responses require queue support");
-        return Err((
-            axum::http::StatusCode::SERVICE_UNAVAILABLE,
-            "background responses require queue support",
-        )
-            .into_response());
+        return Err(Box::new(
+            (
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                "background responses require queue support",
+            )
+                .into_response(),
+        ));
     }
 
     let stored = StoredResponse {
@@ -45,11 +49,13 @@ pub async fn enqueue_background_response(
         .await
     {
         error!("failed to enqueue background response {response_id}: {e}");
-        return Err((
-            axum::http::StatusCode::BAD_GATEWAY,
-            "failed to enqueue background response",
-        )
-            .into_response());
+        return Err(Box::new(
+            (
+                axum::http::StatusCode::BAD_GATEWAY,
+                "failed to enqueue background response",
+            )
+                .into_response(),
+        ));
     }
 
     Ok(())
@@ -59,23 +65,27 @@ pub async fn finalize_background_deletion(
     state: &AppState,
     response_id: &str,
     _stored: &StoredResponse,
-) -> Result<(), axum::response::Response> {
+) -> Result<(), Box<axum::response::Response>> {
     let Some(response_store) = &state.response_store else {
         error!("responses API store is enabled but no response store is configured");
-        return Err((
-            axum::http::StatusCode::BAD_GATEWAY,
-            "response id store unavailable",
-        )
-            .into_response());
+        return Err(Box::new(
+            (
+                axum::http::StatusCode::BAD_GATEWAY,
+                "response id store unavailable",
+            )
+                .into_response(),
+        ));
     };
 
     if let Err(e) = response_store.delete(response_id).await {
         error!("failed to delete response {response_id}: {e}");
-        return Err((
-            axum::http::StatusCode::BAD_GATEWAY,
-            "response store delete failed",
-        )
-            .into_response());
+        return Err(Box::new(
+            (
+                axum::http::StatusCode::BAD_GATEWAY,
+                "response store delete failed",
+            )
+                .into_response(),
+        ));
     }
 
     Ok(())

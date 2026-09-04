@@ -150,7 +150,7 @@ pub async fn proxy_upstream_tracking_response(
                             if let Err(response) =
                                 track_response_from_json(&state, &upstream, &input, &body).await
                             {
-                                return response;
+                                return *response;
                             }
                         }
                         let mut downstream = Response::new(Body::from(body));
@@ -188,7 +188,7 @@ async fn track_response_from_json(
     upstream: &str,
     input: &[Value],
     body: &[u8],
-) -> Result<(), Response> {
+) -> Result<(), Box<Response>> {
     let Ok(response) = serde_json::from_slice::<Value>(body) else {
         return Ok(());
     };
